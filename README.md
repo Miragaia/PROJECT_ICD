@@ -1,5 +1,8 @@
 # PROJECT_ICD
 
+## Authors: Miguel Miragaia (108317) & Tomé de Almeida (127986)
+
+
 Project for the ICD course: data collection and analysis of Points of Interest (POIs) in Aveiro.
 
 This repository contains notebooks, data and helper scripts used to fetch Google Places reviews for POIs, process amenities and run basic NLP analysis (sentiment / topic modeling). The work was produced as part of the Milestone_2 deliverable.
