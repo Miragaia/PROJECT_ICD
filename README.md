@@ -12,35 +12,46 @@ This repository contains notebooks, data and helper scripts used to fetch Google
 	- `pois_aveiro.csv` — input POIs (OSM-derived)
 	- `Reviews_Amenities/` — notebooks and outputs for fetching and processing reviews
 
-## Reproducibility & Python virtualenv
+## Reproducibility: Python virtual environment (root-level)
 
-We recommend using a Python virtual environment to reproduce the analysis. This repo provides a helper script to create a local venv and install dependencies from a `requirements.txt` file.
+Create a single virtual environment in the repository root (outside the Milestone folders) to run both the notebooks and the Streamlit dashboard.
 
 Prerequisites
-
-- Python 3.10+ (the code was tested with Python 3.12 on Linux)
+- Python 3.10+ (tested with Python 3.12 on Linux)
 - Git
 
-Create and activate the venv (one-step)
-
-1. Create the venv and install Python dependencies (script will create `.venv/`):
-
+Setup (from repo root)
 ```bash
-./scripts/create_venv.sh
+python3 -m venv .venv              # create venv in repo root
+source .venv/bin/activate          # activate (Linux/macOS)
+pip install --upgrade pip
+pip install -r requirements.txt    # installs notebooks + dashboard deps
 ```
 
-2. Activate the virtual environment:
+Activation reminder
+- Linux/macOS: `source .venv/bin/activate`
+- Windows PowerShell: `.venv\Scripts\Activate.ps1`
+- Deactivate: `deactivate`
 
-```bash
-source .venv/bin/activate
-```
-
-3. Run the notebook and select the venv as the environment
-
-Running the notebooks
-
-Open `Milestone_2/Reviews_Amenities/reviews.ipynb` and follow the top cells to set the `GOOGLE_API_KEY` environment variable (recommended) or export it in your shell before launching Jupyter:
-
+Environment variable
 ```bash
 export GOOGLE_API_KEY="YOUR_KEY"
 ```
+
+Running the notebooks
+- Launch Jupyter/Lab using the venv Python so the kernel picks up installed deps:
+```bash
+python -m pip install notebook jupyterlab  # if not already installed
+jupyter lab
+```
+- Open the target notebook (e.g., `Milestone_3/notebooks/reviews_pipeline.ipynb`) and ensure the kernel points to `.venv`.
+
+Running the Streamlit dashboard
+```bash
+cd Milestone_3
+streamlit run dashboard/app.py
+```
+
+Notes
+- Virtualenv lives at `.venv/` in the repo root; safe to delete/recreate.
+- Requirements include: pandas, numpy, seaborn, matplotlib, scikit-learn, shapely, nltk, langdetect, requests, wordcloud, vaderSentiment, folium/streamlit-folium, streamlit, plotly, and related NLP/geo libs.
