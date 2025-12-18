@@ -96,37 +96,101 @@ st.plotly_chart(
 
 # ---------- Map ----------
 st.markdown("### Map")
+
+# Map view toggle
+map_view = st.radio(
+    "Map view",
+    ["Markers (Clustered)", "Rating Heatmap", "Review Density Heatmap"],
+    horizontal=True,
+    help="Switch between marker clusters, rating intensity heatmap, or review density heatmap"
+)
+
 mean_lat = filtered["lat"].mean()
 mean_lon = filtered["lon"].mean()
 center = [mean_lat, mean_lon] if pd.notna(mean_lat) and pd.notna(mean_lon) else [40.6405, -8.6538]
 
 m = folium.Map(location=center, zoom_start=MAP_ZOOM_DEFAULT, tiles="cartodbpositron")
-marker_cluster = plugins.MarkerCluster()
-marker_cluster.add_to(m)
 
-for _, row in filtered.iterrows():
-    popup_parts = [f"<b>{row['place_name']}</b>"]
-    if pd.notna(row.get("rating")):
-        popup_parts.append(f"Rating: {row['rating']}")
-    if pd.notna(row.get("place_primary_type")):
-        popup_parts.append(f"Type: {row['place_primary_type']}")
-    if pd.notna(row.get("lang")):
-        popup_parts.append(f"Lang: {row['lang']}")
-    # include short review preview if available
-    review_txt: Optional[str] = row.get("review_text") if "review_text" in row else None
-    if isinstance(review_txt, str) and review_txt.strip():
-        preview = (review_txt[:120] + "…") if len(review_txt) > 120 else review_txt
-        popup_parts.append(f"Review: {preview}")
-    popup_html = "<br>".join(popup_parts)
+if map_view == "Markers (Clustered)":
+    marker_cluster = plugins.MarkerCluster()
+    marker_cluster.add_to(m)
 
-    folium.CircleMarker(
-        location=[row["lat"], row["lon"]],
-        radius=5,
-        color="#3186cc",
-        fill=True,
-        fill_color="#3186cc",
-        fill_opacity=0.8,
-        popup=folium.Popup(popup_html, max_width=300),
-    ).add_to(marker_cluster)
+if map_view == "Markers (Clustered)":
+    for _, row in filtered.iterrows():
+        popup_parts = [f"<b>{row['place_name']}</b>"]
+        if pd.notna(row.get("rating")):
+            popup_parts.append(f"Rating: {row['rating']}")
+        if pd.notna(row.get("place_primary_type")):
+            popup_parts.append(f"Type: {row['place_primary_type']}")
+        if pd.notna(row.get("lang")):
+            popup_parts.append(f"Lang: {row['lang']}")
+        # include short review preview if available
+        review_txt: Optional[str] = row.get("review_text") if "review_text" in row else None
+        if isinstance(review_txt, str) and review_txt.strip():
+            preview = (review_txt[:120] + "…") if len(review_txt) > 120 else review_txt
+            popup_parts.append(f"Review: {preview}")
+        popup_html = "<br>".join(popup_parts)
+
+        folium.CircleMarker(
+            location=[row["lat"], row["lon"]],
+            radius=5,
+            color="#3186cc",
+            fill=True,
+            fill_color="#3186cc",
+            fill_opacity=0.8,
+            popup=folium.Popup(popup_html, max_width=300),
+        ).add_to(marker_cluster)
+
+elif map_view == "Rating Heatmap":
+    # Aggregate by place (mean rating per place)
+    place_agg = filtered.groupby(["place_id", "place_name"]).agg({
+        "lat": "first",
+        "lon": "first",
+        "rating": "mean"
+    }).reset_index()
+    
+    # Create heatmap data: [lat, lon, weight]
+    heat_data = [[row["lat"], row["lon"], row["rating"]] for _, row in place_agg.iterrows()]
+    
+    if heat_data:
+        plugins.HeatMap(
+            heat_data,
+            min_opacity=0.3,
+            max_zoom=18,
+            radius=25,
+            blur=20,
+            gradient={0.0: 'blue', 0.5: 'yellow', 0.75: 'orange', 1.0: 'red'},
+            name="Rating Heatmap"
+        ).add_to(m)
+        
+        # Add markers with rating info
+        for _, row in place_agg.iterrows():
+            folium.CircleMarker(
+                location=[row["lat"], row["lon"]],
+                radius=3,
+                color="white",
+                fill=True,
+                fill_color="white",
+                fill_opacity=0.6,
+                popup=f"<b>{row['place_name']}</b><br>Avg Rating: {row['rating']:.2f}"
+            ).add_to(m)
+
+elif map_view == "Review Density Heatmap":
+    # All reviews as points (density based on review count)
+    heat_data = [[row["lat"], row["lon"]] for _, row in filtered.iterrows()]
+    
+    if heat_data:
+        plugins.HeatMap(
+            heat_data,
+            min_opacity=0.2,
+            max_zoom=18,
+            radius=20,
+            blur=15,
+            gradient={0.0: 'lightblue', 0.4: 'cyan', 0.6: 'lime', 0.8: 'yellow', 1.0: 'red'},
+            name="Review Density"
+        ).add_to(m)
+
+# Add layer control
+folium.LayerControl().add_to(m)
 
 st_folium(m, width=1200, height=550)
