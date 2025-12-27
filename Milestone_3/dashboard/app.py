@@ -10,6 +10,7 @@ import streamlit as st
 from streamlit_folium import st_folium
 import folium
 from folium import plugins
+from pathlib import Path
 
 # ---------- Config ----------
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -122,6 +123,89 @@ st.plotly_chart(
     px.bar(top_places, x="n_reviews", y="place_name", orientation="h", title="Top places"),
     use_container_width=True,
 )
+
+# ---------- Topic Analysis (Precomputed) ----------
+st.markdown("### Topic Analysis (Precomputed)")
+
+OUTPUT_DIR = BASE_DIR / "output"
+
+def available_topic_counts(lang_code: str) -> list:
+    counts = []
+    for p in OUTPUT_DIR.glob(f"topics_{lang_code}_*.json"):
+        try:
+            n = int(p.stem.split("_")[-1])
+            counts.append(n)
+        except Exception:
+            pass
+    return sorted(set(counts))
+
+def load_topics(lang_code: str, n_topics: int) -> pd.DataFrame:
+    path = OUTPUT_DIR / f"topics_{lang_code}_{n_topics}.json"
+    if not path.exists():
+        return pd.DataFrame()
+    try:
+        dfj = pd.read_json(path)
+        return dfj
+    except Exception:
+        return pd.DataFrame()
+
+def load_assignments(lang_code: str, n_topics: int) -> pd.DataFrame:
+    path = OUTPUT_DIR / f"dom_{lang_code}_{n_topics}.csv"
+    if not path.exists():
+        return pd.DataFrame()
+    try:
+        return pd.read_csv(path)
+    except Exception:
+        return pd.DataFrame()
+
+col_t1, col_t2, col_t3 = st.columns(3)
+language_t = col_t1.selectbox("Language", ["English", "Portuguese"])
+lang_code_t = "en" if language_t == "English" else "pt"
+avail = available_topic_counts(lang_code_t)
+if not avail:
+    st.info("No precomputed topics found. Run the precompute script to generate files.")
+else:
+    num_topics_t = col_t2.selectbox("Topics (precomputed)", avail)
+    top_k_reviews_t = col_t3.slider("Top reviews", 1, 20, 8, 1)
+
+    df_topics_t = load_topics(lang_code_t, num_topics_t)
+    dom_df_t = load_assignments(lang_code_t, num_topics_t)
+
+    if df_topics_t.empty or dom_df_t.empty:
+        st.info("Missing topics or assignments for the selected configuration.")
+    else:
+        # Topic distribution
+        t_counts = dom_df_t["topic_id"].value_counts().sort_index()
+        fig_t = px.bar(
+            x=t_counts.index,
+            y=t_counts.values,
+            labels={"x": "Topic ID", "y": "# Reviews"},
+            title=f"Topic Distribution ({language_t})",
+        )
+        st.plotly_chart(fig_t, use_container_width=True)
+
+        # Topic details & review drill-down
+        st.markdown("**Topic details & reviews**")
+        topic_options = sorted(df_topics_t["topic_id"].tolist()) if "topic_id" in df_topics_t.columns else []
+        if topic_options:
+            selected_tid = st.selectbox("Select topic", topic_options)
+            tw_row = df_topics_t[df_topics_t["topic_id"].eq(selected_tid)].iloc[0]
+            st.markdown(f"**Top words (Topic {selected_tid}):**")
+            if "top_words" in df_topics_t.columns:
+                st.write(tw_row["top_words"])  # comma-separated string
+            else:
+                st.write(", ".join(tw_row.get("words", [])))
+
+            st.markdown("**Representative reviews:**")
+            reps = dom_df_t[dom_df_t["topic_id"].eq(selected_tid)].sort_values("topic_prob", ascending=False).head(top_k_reviews_t)
+            if reps.empty:
+                st.info("No reviews mapped to this topic.")
+            else:
+                cols = ["place_name", "rating", "review_text", "publish_time", "topic_prob"]
+                safe_cols = [c for c in cols if c in dom_df_t.columns]
+                st.dataframe(reps[safe_cols], use_container_width=True)
+        else:
+            st.info("No topics identified.")
 
 # ---------- Map ----------
 st.markdown("### Map")

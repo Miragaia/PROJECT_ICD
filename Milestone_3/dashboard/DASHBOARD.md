@@ -291,3 +291,34 @@ For issues or questions about the dashboard, refer to the main repository `READM
 ---
 
 *Last updated: December 15, 2025*
+
+---
+
+## Precomputed Topic Analysis (LDA)
+
+To avoid training LDA models live in the app, precompute topics and assignments first.
+
+From the repo root:
+
+```bash
+# Default: train 3, 5, 7, 10 topics for both EN and PT with 10 passes
+python3 Milestone_3/scripts/precompute_topics.py
+
+# Custom: specify topic counts, passes, min word frequency, and languages
+python3 Milestone_3/scripts/precompute_topics.py --topics 3 5 8 --passes 15 --min-word-freq 3
+python3 Milestone_3/scripts/precompute_topics.py --topics 5 --languages en  # English only
+python3 Milestone_3/scripts/precompute_topics.py --help  # See all options
+```
+
+**CLI Options:**
+- `--topics`: Number of topics (can specify multiple, e.g., `3 5 7 10`)
+- `--passes`: LDA training passes (default: 10, higher = better quality but slower)
+- `--min-word-freq`: Minimum word frequency in dictionary (default: 2)
+- `--languages`: Languages to process: `en`, `pt`, or both (default: `en pt`)
+
+This generates:
+
+- `Milestone_3/output/topics_{lang}_{n}.json`: top words per topic
+- `Milestone_3/output/dom_{lang}_{n}.csv`: dominant topic assignment per review with context
+
+Then run the dashboard and use the "Topic Analysis (Precomputed)" section to explore topics and representative reviews instantly. The dropdown will show all available precomputed topic counts.
