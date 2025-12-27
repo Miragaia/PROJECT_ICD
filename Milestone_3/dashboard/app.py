@@ -76,15 +76,44 @@ st.plotly_chart(
     use_container_width=True,
 )
 
-st.markdown("### Sentiment (English only)")
+st.markdown("### Sentiment (English & Portuguese)")
 f_en = filtered[filtered["lang"].eq("en")].dropna(subset=["sentiment_compound"])
-if len(f_en):
-    st.plotly_chart(
-        px.histogram(f_en, x="sentiment_compound", nbins=30, title="Sentiment compound (VADER)"),
-        use_container_width=True,
-    )
+f_pt = filtered[filtered["lang"].eq("pt")].dropna(subset=["sentiment_compound"])
+
+if len(f_en) > 0 or len(f_pt) > 0:
+    # Create sentiment comparison
+    sentiment_data = []
+    if len(f_en) > 0:
+        sentiment_data.extend([{"Sentiment": score, "Language": "English"} for score in f_en["sentiment_compound"]])
+    if len(f_pt) > 0:
+        sentiment_data.extend([{"Sentiment": score, "Language": "Portuguese"} for score in f_pt["sentiment_compound"]])
+    
+    if sentiment_data:
+        sentiment_df = pd.DataFrame(sentiment_data)
+        st.plotly_chart(
+            px.histogram(
+                sentiment_df,
+                x="Sentiment",
+                color="Language",
+                nbins=30,
+                title="Sentiment distribution (VADER for English, TextBlob for Portuguese)",
+                barmode="overlay"
+            ),
+            use_container_width=True,
+        )
+    
+    # KPIs for sentiment
+    col1, col2 = st.columns(2)
+    if len(f_en) > 0:
+        en_mean = f_en["sentiment_compound"].mean()
+        en_std = f_en["sentiment_compound"].std()
+        col1.metric("English Sentiment (avg)", f"{en_mean:.3f} ± {en_std:.3f}")
+    if len(f_pt) > 0:
+        pt_mean = f_pt["sentiment_compound"].mean()
+        pt_std = f_pt["sentiment_compound"].std()
+        col2.metric("Portuguese Sentiment (avg)", f"{pt_mean:.3f} ± {pt_std:.3f}")
 else:
-    st.info("No English sentiment available for current filters.")
+    st.info("No sentiment data available for current filters.")
 
 st.markdown("### Top places by review count")
 top_places = filtered["place_name"].value_counts().nlargest(12).reset_index()
