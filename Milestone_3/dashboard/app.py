@@ -273,12 +273,24 @@ elif map_view == "Rating Heatmap":
     # Aggregate ratings on a small grid (~100m) to reduce density bias and reflect average score per region
     grid_lat = filtered["lat"].round(3)
     grid_lon = filtered["lon"].round(3)
-    place_agg = filtered.assign(grid_lat=grid_lat, grid_lon=grid_lon).groupby(["grid_lat", "grid_lon"]).agg({
-        "lat": "mean",
-        "lon": "mean",
-        "rating": "mean",
-        "place_name": "count",  # use count for hover context
-    }).reset_index().rename(columns={"place_name": "n_reviews"})
+
+    def mode_or_first(series: pd.Series):
+        m = series.mode()
+        return m.iat[0] if not m.empty else (series.iloc[0] if len(series) else None)
+
+    place_agg = (
+        filtered.assign(grid_lat=grid_lat, grid_lon=grid_lon)
+        .groupby(["grid_lat", "grid_lon"]).agg({
+            "lat": "mean",
+            "lon": "mean",
+            "rating": "mean",
+            "place_name": mode_or_first,          # representative place name in the grid
+            "place_primary_type": mode_or_first,  # representative type in the grid
+            "place_id": "count",                # number of reviews/places in the grid
+        })
+        .reset_index()
+        .rename(columns={"place_id": "n_reviews"})
+    )
 
     # Create heatmap data: [lat, lon, weight], where weight is normalized average rating
     heat_data = []
@@ -303,6 +315,8 @@ elif map_view == "Rating Heatmap":
         # Add grid markers colored by average rating for quick spot checks
         for _, row in place_agg.iterrows():
             color = rating_color(row["rating"])
+            pname = row.get("place_name") or "(multiple places)"
+            ptype = row.get("place_primary_type") or "(mixed types)"
             folium.CircleMarker(
                 location=[row["lat"], row["lon"]],
                 radius=4,
@@ -310,7 +324,12 @@ elif map_view == "Rating Heatmap":
                 fill=True,
                 fill_color=color,
                 fill_opacity=0.8,
-                popup=f"<b>Avg Rating:</b> {row['rating']:.2f}<br><b>Grid reviews:</b> {int(row['n_reviews'])}",
+                popup=(
+                    f"<b>{pname}</b><br>"
+                    f"Type: {ptype}<br>"
+                    f"Avg Rating: {row['rating']:.2f}<br>"
+                    f"Grid reviews: {int(row['n_reviews'])}"
+                ),
             ).add_to(m)
 
 elif map_view == "Review Density Heatmap":
