@@ -16,6 +16,8 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parents[1]
 DATA_PATH = BASE_DIR / "output" / "reviews_enriched.csv"
 MAP_ZOOM_DEFAULT = 13
+# Show individual markers when zoomed in far enough so clusters don't hide points
+CLUSTER_DISABLE_ZOOM = 16
 
 
 def rating_color(rating: float) -> str:
@@ -228,9 +230,9 @@ st.markdown("### Map")
 # Map view toggle
 map_view = st.radio(
     "Map view",
-    ["Markers (Clustered)", "Rating Heatmap", "Review Density Heatmap"],
+    ["Markers (Clustered)", "Rating Heatmap", "Review Density Heatmap", "Topic View"],
     horizontal=True,
-    help="Switch between marker clusters, rating intensity heatmap, or review density heatmap"
+    help="Switch between clusters, rating intensity, review density, or topic assignments"
 )
 
 mean_lat = filtered["lat"].mean()
@@ -240,7 +242,7 @@ center = [mean_lat, mean_lon] if pd.notna(mean_lat) and pd.notna(mean_lon) else 
 m = folium.Map(location=center, zoom_start=MAP_ZOOM_DEFAULT, tiles="cartodbpositron")
 
 if map_view == "Markers (Clustered)":
-    marker_cluster = plugins.MarkerCluster()
+    marker_cluster = plugins.MarkerCluster(disableClusteringAtZoom=CLUSTER_DISABLE_ZOOM)
     marker_cluster.add_to(m)
 
 if map_view == "Markers (Clustered)":
@@ -346,6 +348,78 @@ elif map_view == "Review Density Heatmap":
             gradient={0.0: 'lightblue', 0.4: 'cyan', 0.6: 'lime', 0.8: 'yellow', 1.0: 'red'},
             name="Review Density"
         ).add_to(m)
+
+elif map_view == "Topic View":
+    # Topic-based markers using precomputed assignments
+    topic_lang = st.selectbox("Topic language", ["English", "Portuguese"], key="topic_lang")
+    topic_lang_code = "en" if topic_lang == "English" else "pt"
+
+    avail = available_topic_counts(topic_lang_code)
+    if not avail:
+        st.info("No precomputed topics found. Run the precompute script first.")
+    else:
+        topic_n = st.selectbox("# of topics", avail, key="topic_n")
+        topics_df = load_topics(topic_lang_code, topic_n)
+        assign_df = load_assignments(topic_lang_code, topic_n)
+
+        if topics_df.empty or assign_df.empty:
+            st.info("Missing topics/assignments for this configuration.")
+        else:
+            # Map topic_id -> top words
+            topic_word_map = {}
+            if "top_words" in topics_df.columns:
+                for _, r in topics_df.iterrows():
+                    topic_word_map[r["topic_id"]] = str(r["top_words"])
+
+            # Rebuild the language slice with row_idx alignment and add lat/lon
+            df_lang_all = df[df["lang"].eq(topic_lang_code)].reset_index(drop=True)
+            df_lang_all = df_lang_all.reset_index().rename(columns={"index": "row_idx"})
+            merged = assign_df.merge(df_lang_all, on="row_idx", how="inner", suffixes=("", "_df"))
+
+            # Apply current filters intersection via place_id
+            if "place_id" in filtered.columns:
+                merged = merged[merged["place_id"].isin(filtered["place_id"].unique())]
+
+            if merged.empty:
+                st.info("No topic-mapped reviews match current filters.")
+            else:
+                # Color palette for topics
+                palette = [
+                    "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+                    "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"
+                ]
+                def topic_color(tid):
+                    return palette[int(tid) % len(palette)] if pd.notna(tid) else "#aaaaaa"
+
+                cluster = plugins.MarkerCluster(disableClusteringAtZoom=CLUSTER_DISABLE_ZOOM).add_to(m)
+
+                for _, row in merged.iterrows():
+                    lat = row.get("lat")
+                    lon = row.get("lon")
+                    if pd.isna(lat) or pd.isna(lon):
+                        continue
+                    tid = row.get("topic_id")
+                    prob = row.get("topic_prob")
+                    twords = topic_word_map.get(tid, "")
+                    pname = row.get("place_name") or "(place)"
+                    ptype = row.get("place_primary_type") or "(type)"
+                    rating_val = row.get("rating")
+                    popup_html = (
+                        f"<b>{pname}</b><br>"
+                        f"Type: {ptype}<br>"
+                        f"Topic: {tid} (p={prob:.2f})<br>"
+                        f"Top words: {twords}<br>"
+                        f"Rating: {rating_val if pd.notna(rating_val) else 'n/a'}"
+                    )
+                    folium.CircleMarker(
+                        location=[lat, lon],
+                        radius=4,
+                        color=topic_color(tid),
+                        fill=True,
+                        fill_color=topic_color(tid),
+                        fill_opacity=0.8,
+                        popup=folium.Popup(popup_html, max_width=320),
+                    ).add_to(cluster)
 
 # Add layer control
 folium.LayerControl().add_to(m)
