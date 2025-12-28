@@ -17,6 +17,21 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 DATA_PATH = BASE_DIR / "output" / "reviews_enriched.csv"
 MAP_ZOOM_DEFAULT = 13
 
+
+def rating_color(rating: float) -> str:
+    """Map rating (1-5) to a color from red (low) to green (high)."""
+    if pd.isna(rating):
+        return "#999999"
+    if rating >= 4.5:
+        return "#0b9e43"  # deep green
+    if rating >= 4.0:
+        return "#4caf50"  # green
+    if rating >= 3.0:
+        return "#cddc39"  # yellow-green
+    if rating >= 2.0:
+        return "#ff9800"  # orange
+    return "#f44336"       # red
+
 st.set_page_config(page_title="Aveiro POI Reviews", layout="wide")
 
 
@@ -97,7 +112,7 @@ if len(f_en) > 0 or len(f_pt) > 0:
                 x="Sentiment",
                 color="Language",
                 nbins=30,
-                title="Sentiment distribution (VADER for English, TextBlob for Portuguese)",
+                title="Sentiment distribution (VADER for English, BERTweet-PT for Portuguese)",
                 barmode="overlay"
             ),
             use_container_width=True,
@@ -255,37 +270,47 @@ if map_view == "Markers (Clustered)":
         ).add_to(marker_cluster)
 
 elif map_view == "Rating Heatmap":
-    # Aggregate by place (mean rating per place)
-    place_agg = filtered.groupby(["place_id", "place_name"]).agg({
-        "lat": "first",
-        "lon": "first",
-        "rating": "mean"
-    }).reset_index()
-    
-    # Create heatmap data: [lat, lon, weight]
-    heat_data = [[row["lat"], row["lon"], row["rating"]] for _, row in place_agg.iterrows()]
+    # Aggregate ratings on a small grid (~100m) to reduce density bias and reflect average score per region
+    grid_lat = filtered["lat"].round(3)
+    grid_lon = filtered["lon"].round(3)
+    place_agg = filtered.assign(grid_lat=grid_lat, grid_lon=grid_lon).groupby(["grid_lat", "grid_lon"]).agg({
+        "lat": "mean",
+        "lon": "mean",
+        "rating": "mean",
+        "place_name": "count",  # use count for hover context
+    }).reset_index().rename(columns={"place_name": "n_reviews"})
+
+    # Create heatmap data: [lat, lon, weight], where weight is normalized average rating
+    heat_data = []
+    for _, row in place_agg.iterrows():
+        if pd.isna(row["rating"]):
+            continue
+        weight = max(0.0, min(1.0, row["rating"] / 5.0))
+        heat_data.append([row["lat"], row["lon"], weight])
     
     if heat_data:
         plugins.HeatMap(
             heat_data,
-            min_opacity=0.3,
+            min_opacity=0.5,
             max_zoom=18,
-            radius=25,
-            blur=20,
-            gradient={0.0: 'blue', 0.5: 'yellow', 0.75: 'orange', 1.0: 'red'},
+            radius=22,
+            blur=18,
+            max_val=1.0,
+            gradient={0.0: 'red', 0.4: 'orange', 0.6: 'yellow', 0.8: 'lightgreen', 1.0: 'green'},
             name="Rating Heatmap"
         ).add_to(m)
         
-        # Add markers with rating info
+        # Add grid markers colored by average rating for quick spot checks
         for _, row in place_agg.iterrows():
+            color = rating_color(row["rating"])
             folium.CircleMarker(
                 location=[row["lat"], row["lon"]],
-                radius=3,
-                color="white",
+                radius=4,
+                color=color,
                 fill=True,
-                fill_color="white",
-                fill_opacity=0.6,
-                popup=f"<b>{row['place_name']}</b><br>Avg Rating: {row['rating']:.2f}"
+                fill_color=color,
+                fill_opacity=0.8,
+                popup=f"<b>Avg Rating:</b> {row['rating']:.2f}<br><b>Grid reviews:</b> {int(row['n_reviews'])}",
             ).add_to(m)
 
 elif map_view == "Review Density Heatmap":
