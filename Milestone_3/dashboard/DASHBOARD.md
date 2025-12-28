@@ -47,20 +47,25 @@ Four metrics displayed at the top summarize the filtered dataset:
 - Identify rating concentration (e.g., 4–5 stars vs. lower ratings)
 - Compare EN vs. PT rating patterns
 
-### 4. **Sentiment Distribution (English only)**
+### 4. **Sentiment Distribution (English & Portuguese)**
 
-**Type**: Histogram
+**Type**: Histogram with language overlay
 
 **Shows:**
-- VADER sentiment compound scores for English reviews only
+- VADER sentiment compound scores for English reviews
+- BERTweet-PT sentiment scores for Portuguese reviews
 - Score range: [-1 (negative), 0 (neutral), +1 (positive)]
 - Number of bins = 30
+- Languages color-coded in the histogram
 
 **Behavior:**
-- Displays only when English reviews are present in filtered data
-- Automatically hidden if filter excludes English or no EN data matches
+- Displays both languages when present in filtered data
+- Shows separate KPI metrics for each language (avg sentiment ± std dev)
+- Automatically hidden if filter excludes all data
 
-**Note:** Portuguese sentiment requires a separate sentiment model; currently VADER (English-tuned) is used.
+**Models used:**
+- **English**: VADER (Valence Aware Dictionary and sEntiment Reasoner)
+- **Portuguese**: BERTweet-PT (multilingual BERT fine-tuned for Portuguese)
 
 ### 5. **Top Places by Review Count**
 
@@ -83,15 +88,16 @@ Four metrics displayed at the top summarize the filtered dataset:
 
 1. **Markers (Clustered)** - Default view
    - Blue circle markers with clustering for dense areas
+   - Auto-expands into individual dots when zoomed in (at zoom level 16+)
    - Click markers for detailed popups
    - Popups show: place name, rating, type, language, review preview
 
 2. **Rating Heatmap** - Quality intensity view
-   - Color gradient based on average rating per place
-   - Gradient: Blue (low) → Yellow → Orange → Red (high)
-   - Small white markers show place locations
-   - Popup shows average rating per place
-   - Aggregates multiple reviews per place
+   - Color gradient based on average rating per location (aggregated on ~100m grid)
+   - Gradient: Red (low: <2) → Orange → Yellow → Green (high: >4.5)
+   - Grid markers colored by average rating for quick spot checks
+   - Popup shows: representative place name, type, average rating, grid review count
+   - Reduces density bias by aggregating nearby reviews
 
 3. **Review Density Heatmap** - Activity intensity view
    - Color gradient based on review count/concentration
@@ -99,12 +105,20 @@ Four metrics displayed at the top summarize the filtered dataset:
    - Shows where most reviews are concentrated
    - Helps identify high-activity zones
 
+4. **Topic View** - Topic assignment view (precomputed LDA)
+   - Topic-colored circle markers from precomputed LDA assignments
+   - Auto-expands clusters at zoom level 16+ for individual inspection
+   - Select language and number of topics from sidebar dropdowns
+   - Popup shows: place name, type, topic ID, topic probability, top topic words, rating
+   - Respects current place/filter selections
+
 **Common Features:**
 - **Center**: Dynamically centers on the mean latitude/longitude of filtered places
 - **Zoom**: Default zoom level 13 (neighborhood-level detail)
 - **Base tiles**: CartoDB Positron (clean, light aesthetic)
 - **Layer control**: Toggle between different map layers
 - **Responsive**: Adapts to filter changes in real-time
+- **Clustering behavior**: Markers automatically expand into individual dots at high zoom (zoom ≥ 16) for detailed exploration
 
 **Heatmap Parameters:**
 - Radius: 20-25 pixels
@@ -113,9 +127,10 @@ Four metrics displayed at the top summarize the filtered dataset:
 - Max zoom: 18 (preserves heatmap at high zoom levels)
 
 **Use Cases:**
-- **Markers**: Explore individual places and read reviews
-- **Rating Heatmap**: Identify areas with high-quality establishments
+- **Markers**: Explore individual places and read reviews; zoom in to expand clustered areas
+- **Rating Heatmap**: Identify areas with high-quality establishments; grid aggregation reduces noise
 - **Density Heatmap**: Find popular/frequently-reviewed zones
+- **Topic View**: Explore thematic groupings of reviews by LDA topic; understand semantic patterns per place
 
 ---
 
@@ -244,10 +259,10 @@ dashboard/
 
 ### Current limitations
 
-1. **Portuguese sentiment**: VADER is English-only. A Portuguese model (e.g., PT-BERT, SentiLex) would enable PT sentiment visualization.
-2. **Temporal analysis**: No date-range filter; all reviews are aggregated over time.
-3. **Place details**: Popup shows basic info; more detailed place profiles could be added.
-4. **Statistical tests**: No significance tests or confidence intervals for comparative analysis.
+1. **Temporal analysis**: No date-range filter; all reviews are aggregated over time.
+2. **Place details**: Popup shows basic info; more detailed place profiles could be added.
+3. **Statistical tests**: No significance tests or confidence intervals for comparative analysis.
+4. **Topic caching**: Topics must be precomputed offline; live model training not supported in dashboard.
 
 ### Suggested enhancements
 
@@ -256,11 +271,12 @@ dashboard/
 3. **Export**: Add CSV/PDF export of filtered results
 4. **Custom map layers**: Toggle between satellite, street, and other tile sets
 5. **Advanced search**: Regex or fuzzy matching for place names
-6. **Multi-language sentiment**: Integrate Portuguese sentiment model
-7. **Mobile optimization**: Responsive design for phones/tablets
-8. **Sentiment heatmap**: Add heatmap layer colored by average sentiment (EN only)
-9. **Comparative analysis**: Side-by-side comparison of two places/zones
-10. **Route planning**: Connect high-rated places for tourism routes
+6. **Mobile optimization**: Responsive design for phones/tablets
+7. **Sentiment heatmap**: Add heatmap layer colored by average sentiment per language
+8. **Comparative analysis**: Side-by-side comparison of two places/zones
+9. **Route planning**: Connect high-rated places for tourism routes
+10. **Topic color legend**: Add map legend showing topic ID to color mapping
+11. **Dynamic grid size**: Allow users to adjust rating heatmap grid resolution
 
 ---
 
@@ -290,7 +306,7 @@ For issues or questions about the dashboard, refer to the main repository `READM
 
 ---
 
-*Last updated: December 15, 2025*
+*Last updated: December 28, 2025*
 
 ---
 
